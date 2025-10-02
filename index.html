@@ -11,6 +11,7 @@
     --radius:14px;
     --cup-bg: #fffdf9;
   }
+  body.dark{ --bg:#0b1020; --card:#0f1724; --muted:#9aa4b2; --accent:#b29c60; --cup-bg: #0b1220; color:#e6eef8 }
   *{box-sizing:border-box}
   body{margin:0; font-family:Inter, Roboto, "Helvetica Neue", Arial, sans-serif; background:var(--bg); color:#1f2937;}
   .wrap{max-width:1200px; margin:28px auto; display:flex; gap:20px; padding:0 18px; position:relative}
@@ -21,6 +22,7 @@
   .row{display:flex; gap:8px; align-items:center}
   .btn{padding:8px 12px; border-radius:10px; border:1px solid #e6e6e6; background:#fff; cursor:pointer; font-size:14px}
   .btn-primary{background:#10b981;color:#fff;border:none}
+  .dark .btn{background:#0f1724;color:var(--muted); border:1px solid rgba(255,255,255,0.06)}
   select, input[type="text"]{padding:8px;border-radius:10px;border:1px solid #e6e6e6;background:#fff; width:100%}
   .layers-list{margin-top:12px; max-height:340px; overflow:auto; display:flex; flex-direction:column; gap:10px}
   .layer-item{display:grid; grid-template-columns:24px 1fr auto; gap:8px; align-items:center; padding:10px; border-radius:10px; border:1px solid #f1f1f1; background:#fbfbfb}
@@ -37,6 +39,7 @@
   .right-stats{position:absolute; right:40px; top:32px; text-align:right}
   .svg-wrap{background:var(--card); padding:18px; border-radius:12px}
   .handle{cursor:ns-resize}
+  .label-box{font-size:12px; font-family:sans-serif; fill:#fff}
   /* responsive */
   @media (max-width:980px){ .wrap{flex-direction:column} .panel{width:100%} .right-stats{position:static; margin-top:10px; text-align:left} }
 </style>
@@ -59,7 +62,7 @@
           <button class="btn" data-fill="250">250 мл</button>
           <button class="btn" data-fill="350">350 мл</button>
         </div>
-        <div class="note">Стакан физически: <strong>350 мл</strong>. Выбранный уровень будет полностью заполнен слоями (сумма слоёв = выбранный объём).</div>
+        <div class="note">Стакан физически: <strong>350 мл</strong>. Выбранный уровень будет заполнен слоями (сумма слоёв = выбранный объём).</div>
       </div>
 
       <div style="margin-top:12px">
@@ -82,7 +85,11 @@
         <button id="copyJson" class="btn">Копировать JSON</button>
       </div>
 
-      <div class="note">Теперь: 1) стакан всегда заполняется до выбранного объёма (слои масштабируются/распределяются), 2) можно перетаскивать границы между слоями прямо в стакане — при движении меняются только соседние слои, 3) волнообразность убрана, слои — ровные с небольшими отступами и скруглениями.</div>
+      <div style="margin-top:12px; display:flex; gap:8px; align-items:center">
+        <label class="small muted">Тема</label>
+        <button id="toggleTheme" class="btn">Тёмная / светлая</button>
+      </div>
+
     </div>
 
     <div class="preview" id="previewWrap">
@@ -99,10 +106,9 @@
         <div class="svg-wrap">
           <svg id="cupSvg" width="520" height="620" viewBox="0 0 520 620" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMin meet">
             <defs>
-              <clipPath id="cupClip">
-                <!-- inner area path (paper cup interior) -->
-                <path id="innerPath"/>
-              </clipPath>
+              <!-- cup inner path is defined once -->
+              <path id="innerPath"/>
+              <clipPath id="cupClip"><use href="#innerPath" /></clipPath>
               <path id="cupShapePath"/>
             </defs>
 
@@ -118,15 +124,15 @@
               <text id="lidText" x="260" y="112" font-family="sans-serif" font-size="14" text-anchor="middle" fill="#333"></text>
             </g>
 
-            <!-- dashed volume indicator (right side) -->
+            <!-- dashed volume indicator (dynamic) -->
             <g id="volumeIndicator">
-              <!-- dashed vertical line -->
-              <line id="volLine" x1="430" y1="120" x2="430" y2="520" stroke="#bdbdbd" stroke-width="1" stroke-dasharray="4 4" />
-              <text id="volText" x="440" y="140" font-size="13" font-family="sans-serif" fill="#333">350 мл</text>
+              <line id="volLine" x1="430" x2="430" stroke="#bdbdbd" stroke-width="1" stroke-dasharray="4 4" />
+              <text id="volText" x="440" font-size="13" font-family="sans-serif" fill="#333">350 мл</text>
+              <!-- connectors will be drawn dynamically -->
             </g>
 
             <!-- layers group clipped -->
-            <g clip-path="url(#cupClip)" id="layersGroup" transform="translate(0,0)">
+            <g id="layersGroup" clip-path="url(#cupClip)">
               <!-- layers will be injected here -->
             </g>
 
@@ -139,11 +145,6 @@
             <!-- layer labels on cup (right side) -->
             <g id="labelsGroup"></g>
 
-            <!-- badge bottom -->
-            <g transform="translate(200, 500)">
-              <rect x="0" y="0" rx="12" width="160" height="54" fill="#fff" stroke="#efe7db"/>
-              <text id="badgeMain" x="12" y="26" font-size="14" font-family="sans-serif" fill="#444"></text>
-            </g>
           </svg>
         </div>
       </div>
@@ -170,8 +171,8 @@ const ALL_INGREDIENTS = Object.keys(defaultPalette);
 
 /* ---------- State ---------- */
 let state = {
-  fillTarget: 350, // allowed: 30,60,250,350
-  layers: [], // each: {id,name,color,ml}
+  fillTarget: 350,
+  layers: [],
   drinkName: ''
 };
 
@@ -193,6 +194,7 @@ const cupShapePath = document.getElementById('cupShapePath');
 const innerPath = document.getElementById('innerPath');
 const volText = document.getElementById('volText');
 const volLine = document.getElementById('volLine');
+const toggleThemeBtn = document.getElementById('toggleTheme');
 
 /* ---------- Init UI ---------- */
 ALL_INGREDIENTS.forEach(ing=>{
@@ -202,6 +204,10 @@ document.querySelectorAll('.panel .btn[data-fill]').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     changeFillTarget(Number(btn.dataset.fill));
   });
+});
+
+toggleThemeBtn.addEventListener('click', ()=>{
+  document.body.classList.toggle('dark');
 });
 
 /* create cup paths (paper cup shape + inner) */
@@ -232,7 +238,6 @@ buildCupPaths();
 function uid(){ return Math.random().toString(36).slice(2,9); }
 function totalFilledMl(){ return state.layers.reduce((s,l)=>s + (Number(l.ml)||0), 0); }
 
-/* Ensure layers sum exactly to fillTarget. If total is zero, distribute equally. */
 function normalizeLayersToFill(){
   const n = state.layers.length; if(n===0) return;
   const target = state.fillTarget;
@@ -242,13 +247,10 @@ function normalizeLayersToFill(){
     state.layers.forEach((l,i)=> l.ml = (i===n-1) ? (target - each*(n-1)) : each );
     return;
   }
-  // scale proportionally
   state.layers.forEach(l=> l.ml = Math.max(0, (l.ml/total) * target) );
-  // rounding fix to ensure integer and total equals target
   let rounded = state.layers.map(l=> Math.round(l.ml));
   let sum = rounded.reduce((a,b)=>a+b,0);
   let diff = target - sum;
-  // distribute diff starting from last
   for(let i=rounded.length-1; i>=0 && diff!==0; i--){
     const take = diff>0?1:-1;
     rounded[i]+=take; diff-=take;
@@ -256,68 +258,43 @@ function normalizeLayersToFill(){
   state.layers.forEach((l,i)=> l.ml = Math.max(0, rounded[i]));
 }
 
-function changeFillTarget(newTarget){
-  const prev = state.fillTarget;
-  state.fillTarget = newTarget;
-  // scale layers to new target
-  normalizeLayersToFill();
-  render();
-}
-
-/* add layer default color and redistribute ml equally */
-function addLayer(name){
-  const color = defaultPalette[name] || '#dddddd';
-  state.layers.push({ id: uid(), name, color, ml: 0 });
-  normalizeLayersToFill();
-  render();
-}
+function changeFillTarget(newTarget){ state.fillTarget = newTarget; normalizeLayersToFill(); render(); }
+function addLayer(name){ const color = defaultPalette[name] || '#dddddd'; state.layers.push({ id: uid(), name, color, ml: 0 }); normalizeLayersToFill(); render(); }
 function removeLayer(id){ state.layers = state.layers.filter(l=>l.id!==id); normalizeLayersToFill(); render(); }
 function moveLayer(id, dir){ const idx = state.layers.findIndex(l=>l.id===id); if(idx===-1) return; const ni = dir==='up'? idx-1: idx+1; if(ni<0 || ni>=state.layers.length) return; const arr = [...state.layers]; [arr[idx], arr[ni]] = [arr[ni], arr[idx]]; state.layers = arr; render(); }
 function setLayerColor(id, color){ const l = state.layers.find(x=>x.id===id); if(l) l.color = color; render(); }
 function setLayerName(id, name){ const l = state.layers.find(x=>x.id===id); if(l) l.name = name; render(); }
 
-/* set ml for one layer (via slider): adjust neighbor to keep sum = fillTarget. Prefer next layer; else previous; else scale others. */
-function setLayerMl(id, ml){ ml = Math.max(0, Math.round(Number(ml)||0)); const idx = state.layers.findIndex(l=>l.id===id); if(idx===-1) return; const old = state.layers[idx].ml; const diff = ml - old; if(diff===0) return;
-  const n = state.layers.length;
-  if(n===1){ state.layers[0].ml = state.fillTarget; render(); return; }
-  // try adjust next layer
+function setLayerMl(id, ml){ ml = Math.max(0, Math.round(Number(ml)||0)); const idx = state.layers.findIndex(l=>l.id===id); if(idx===-1) return; const old = state.layers[idx].ml; const diff = ml - old; if(diff===0) return; const n = state.layers.length; if(n===1){ state.layers[0].ml = state.fillTarget; render(); return; }
   let adjIdx = (idx+1 < n) ? idx+1 : (idx-1>=0? idx-1 : -1);
   if(adjIdx !== -1){
     let adj = state.layers[adjIdx];
-    let maxReduce = adj.ml; // how much we can subtract
-    if(diff > 0){ // increase current, decrease adjacent
+    let maxReduce = adj.ml;
+    if(diff > 0){
       const reduce = Math.min(maxReduce, diff);
       state.layers[idx].ml = old + reduce;
       adj.ml = adj.ml - reduce;
-      // if still diff remains (couldn't fully reduce), distribute to others proportionally
       let remain = diff - reduce;
       if(remain>0){
-        // distribute negative to others
         for(let i=0;i<n && remain>0;i++){
           if(i===idx||i===adjIdx) continue;
           const take = Math.min(state.layers[i].ml, remain);
           state.layers[idx].ml += take; state.layers[i].ml -= take; remain -= take;
         }
       }
-    } else { // diff < 0, we decreased current -> give to adjacent
+    } else {
       const give = Math.min(-diff, state.fillTarget - totalFilledMl());
-      state.layers[idx].ml = old + diff; // diff negative
-      // allocate freed ml to adjacent
-      adj.ml = adj.ml - diff; // since diff negative, subtracting negative = add
+      state.layers[idx].ml = old + diff;
+      adj.ml = adj.ml - diff;
     }
   }
-  // final clamp and normalize to ensure integers summing to fillTarget
-  normalizeLayersToFill();
-  render();
+  normalizeLayersToFill(); render();
 }
 
-/* change drink name */
 drinkNameInput.addEventListener('input', (e)=>{ state.drinkName = e.target.value; render(); });
 
-/* export SVG */
 exportBtn.addEventListener('click', ()=>{
   const svg = cupSvg.cloneNode(true);
-  // remove interactive handles before export
   svg.querySelectorAll('.handle').forEach(n=>n.remove());
   const s = new XMLSerializer().serializeToString(svg);
   const blob = new Blob([s], { type: 'image/svg+xml;charset=utf-8' });
@@ -327,17 +304,10 @@ exportBtn.addEventListener('click', ()=>{
   document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 });
 
-/* copy JSON */
-copyJsonBtn.addEventListener('click', ()=>{
-  const data = JSON.stringify({ fillTarget: state.fillTarget, layers: state.layers, drinkName: state.drinkName }, null, 2);
-  navigator.clipboard?.writeText(data);
-  alert('JSON скопирован в буфер обмена');
-});
+copyJsonBtn.addEventListener('click', ()=>{ const data = JSON.stringify({ fillTarget: state.fillTarget, layers: state.layers, drinkName: state.drinkName }, null, 2); navigator.clipboard?.writeText(data); alert('JSON скопирован в буфер обмена'); });
 
-/* ingredient add */
 addLayerBtn.addEventListener('click', ()=>{ const v = ingredientSelect.value; addLayer(v); });
 
-/* init ingredient select */
 (function initIngredients(){ ingredientSelect.innerHTML = ''; ALL_INGREDIENTS.forEach(name=>{ const o = document.createElement('option'); o.value = name; o.textContent = name; ingredientSelect.appendChild(o); });})();
 
 /* ---------- Render ---------- */
@@ -345,7 +315,6 @@ let currentHandles = [];
 function clearHandles(){ currentHandles.forEach(h=>h.remove()); currentHandles = []; }
 
 function render(){
-  // UI list
   layersList.innerHTML = '';
   layerCountEl.textContent = state.layers.length;
   state.layers.forEach((layer, idx)=>{
@@ -353,12 +322,11 @@ function render(){
     const sw = document.createElement('div'); sw.className='swatch'; sw.style.background = layer.color || '#ddd';
     const center = document.createElement('div'); center.style.display='flex'; center.style.flexDirection='column';
     const top = document.createElement('div'); top.style.display='flex'; top.style.justifyContent='space-between'; top.style.alignItems='center';
-    const title = document.createElement('div'); title.innerHTML = `<strong>${layer.name}</strong>`; // no ml in panel title per user's request
+    const title = document.createElement('div'); title.innerHTML = `<strong>${layer.name}</strong>`;
     const controls = document.createElement('div');
     const colorInput = document.createElement('input'); colorInput.type='color'; colorInput.value = layer.color || '#dddddd'; colorInput.title = 'Изменить цвет'; colorInput.addEventListener('input', (e)=>{ setLayerColor(layer.id, e.target.value); });
     const presets = document.createElement('div'); presets.className='color-presets'; Object.values(defaultPalette).slice(0,8).forEach(c=>{ const p = document.createElement('div'); p.className='preset'; p.style.background=c; p.addEventListener('click', ()=> setLayerColor(layer.id, c)); presets.appendChild(p); });
     const nameInput = document.createElement('input'); nameInput.type='text'; nameInput.value = layer.name; nameInput.style.marginTop='6px'; nameInput.addEventListener('change', (e)=> setLayerName(layer.id, e.target.value));
-    // slider for ml (visible but without changing relative labels)
     const slider = document.createElement('input'); slider.type='range'; slider.min = 0; slider.max = state.fillTarget; slider.step=1; slider.value = layer.ml || 0; slider.addEventListener('input', (e)=>{ setLayerMl(layer.id, Number(e.target.value)); });
     const btnUp = document.createElement('button'); btnUp.className='btn'; btnUp.textContent='▲'; btnUp.style.padding='6px'; btnUp.addEventListener('click', ()=> moveLayer(layer.id,'up'));
     const btnDown = document.createElement('button'); btnDown.className='btn'; btnDown.textContent='▼'; btnDown.style.padding='6px'; btnDown.addEventListener('click', ()=> moveLayer(layer.id,'down'));
@@ -368,16 +336,11 @@ function render(){
     item.appendChild(sw); item.appendChild(center); item.appendChild(controls); layersList.appendChild(item);
   });
 
-  // Update badges / right stats
   const total = totalFilledMl();
   filledBadge.textContent = `${total} / ${PHYSICAL_VOLUME} мл`;
-  badgeMain.textContent = `${PHYSICAL_VOLUME} мл`;
-
-  // Lid title
   lidText.textContent = state.drinkName || '';
   volText.textContent = `${state.fillTarget} мл`;
 
-  // Draw layers in SVG
   while(layersGroup.firstChild) layersGroup.removeChild(layersGroup.firstChild);
   while(labelsGroup.firstChild) labelsGroup.removeChild(labelsGroup.firstChild);
   clearHandles();
@@ -390,15 +353,27 @@ function render(){
     const leftX = cupInner.x + 10;
     const rightX = cupInner.x + cupInner.width - 10;
     const width = rightX - leftX;
-    const gap = 6; // gap between layers in px
-    // Ensure integer pixels and ml mapping
+    const gap = 6;
     const pxPerMl = (fillH / state.fillTarget) || 0.0001;
+
+    // update volume indicator to match filledTopY..bottomY
+    volLine.setAttribute('x1', 430); volLine.setAttribute('x2', 430);
+    volLine.setAttribute('y1', filledTopY); volLine.setAttribute('y2', bottomY);
+    volText.setAttribute('x', 440); volText.setAttribute('y', filledTopY + 14);
+
+    // remove old connectors
+    const oldConnectors = document.querySelectorAll('.vol-connector'); oldConnectors.forEach(n=>n.remove());
+    // top connector (horizontal) from vol line to cup left side (a bit left of cup)
+    const topConn = document.createElementNS('http://www.w3.org/2000/svg','line');
+    topConn.setAttribute('class','vol-connector'); topConn.setAttribute('x1',430); topConn.setAttribute('y1',filledTopY); topConn.setAttribute('x2', rightX); topConn.setAttribute('y2', filledTopY); topConn.setAttribute('stroke','#bdbdbd'); topConn.setAttribute('stroke-width','1'); topConn.setAttribute('stroke-dasharray','4 4'); layersGroup.appendChild(topConn);
+    // bottom connector
+    const botConn = document.createElementNS('http://www.w3.org/2000/svg','line');
+    botConn.setAttribute('class','vol-connector'); botConn.setAttribute('x1',430); botConn.setAttribute('y1',bottomY); botConn.setAttribute('x2', rightX); botConn.setAttribute('y2',bottomY); botConn.setAttribute('stroke','#bdbdbd'); botConn.setAttribute('stroke-width','1'); botConn.setAttribute('stroke-dasharray','4 4'); layersGroup.appendChild(botConn);
 
     for(let i=0;i<state.layers.length;i++){
       const layer = state.layers[i];
       const h = Math.round((Number(layer.ml) / state.fillTarget) * fillH);
       let topY = currentBottom - h;
-      // apply gap spacing
       const innerTop = topY + Math.round(gap/2);
       const innerH = Math.max(0, h - gap);
       if(innerH > 0){
@@ -413,22 +388,33 @@ function render(){
         rect.setAttribute('stroke', 'none');
         layersGroup.appendChild(rect);
 
-        // label on right side: only name (no ml)
-        const labelY = innerTop + innerH/2;
-        if(innerH > 12){
-          const g = document.createElementNS('http://www.w3.org/2000/svg','g');
-          const text = document.createElementNS('http://www.w3.org/2000/svg','text');
-          text.setAttribute('x', cupInner.x + cupInner.width + 18);
-          text.setAttribute('y', labelY + 4);
-          text.setAttribute('font-size','12');
-          text.setAttribute('font-family','sans-serif');
-          text.setAttribute('fill','#333');
-          text.textContent = layer.name;
-          g.appendChild(text);
-          labelsGroup.appendChild(g);
-        }
+        // label: rounded rect slightly overlapping onto the layer (to the right)
+        const labelPaddingX = 8; const labelPaddingY = 6;
+        const labelText = layer.name;
+        // create a temporary text to measure approximate width (simple char measure)
+        const approxWidth = Math.max(40, labelText.length * 7 + labelPaddingX*2);
+        const lx = rightX + 8; // position near right edge, overlaps slightly
+        const ly = innerTop + Math.max(12, innerH/2);
+        const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+        const labelRect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+        labelRect.setAttribute('x', lx);
+        labelRect.setAttribute('y', ly - 14);
+        labelRect.setAttribute('width', approxWidth);
+        labelRect.setAttribute('height', 24);
+        labelRect.setAttribute('rx', 12);
+        labelRect.setAttribute('fill', (document.body.classList.contains('dark')? '#0b1220' : '#ffffff'));
+        labelRect.setAttribute('stroke', '#ddd');
+        labelRect.setAttribute('class','label-box');
+        const text = document.createElementNS('http://www.w3.org/2000/svg','text');
+        text.setAttribute('x', lx + 12);
+        text.setAttribute('y', ly + 4);
+        text.setAttribute('font-size','12');
+        text.setAttribute('font-family','sans-serif');
+        text.setAttribute('fill', (document.body.classList.contains('dark')? '#e6eef8' : '#333'));
+        text.textContent = labelText;
+        g.appendChild(labelRect); g.appendChild(text); labelsGroup.appendChild(g);
       }
-      // create handle between this layer and next (except after last)
+
       if(i < state.layers.length - 1){
         const handleY = topY;
         const hRect = document.createElementNS('http://www.w3.org/2000/svg','rect');
@@ -439,65 +425,38 @@ function render(){
         hRect.setAttribute('fill', 'transparent');
         hRect.setAttribute('class', 'handle');
         hRect.style.cursor = 'ns-resize';
-        // visual subtle line
         const vis = document.createElementNS('http://www.w3.org/2000/svg','line');
         vis.setAttribute('x1', leftX);
         vis.setAttribute('x2', rightX);
         vis.setAttribute('y1', handleY);
         vis.setAttribute('y2', handleY);
-        vis.setAttribute('stroke', '#ffffffAA');
+        vis.setAttribute('stroke', document.body.classList.contains('dark')? '#ffffff55' : '#ffffffAA');
         vis.setAttribute('stroke-width', '2');
         vis.setAttribute('pointer-events','none');
         layersGroup.appendChild(vis);
         layersGroup.appendChild(hRect);
-        // pointer interactions
         makeHandleInteractive(hRect, i, pxPerMl);
-        currentHandles.push(hRect);
-        currentHandles.push(vis);
+        currentHandles.push(hRect); currentHandles.push(vis);
       }
 
       currentBottom = topY;
     }
+  } else {
+    // if no layers, still update vol indicator to top = bottom (hidden)
+    const bottomY = cupInner.y + cupInner.height; volLine.setAttribute('y1', bottomY); volLine.setAttribute('y2', bottomY);
   }
 }
 
-/* handle logic: dragging boundary between layer i (above) and i+1 (below) */
 function makeHandleInteractive(handleEl, upperIndex, pxPerMl){
-  let dragging = false;
-  let startY = 0;
-  let startUpperMl = 0;
-  let startLowerMl = 0;
-
-  function getSvgY(evt){
-    const pt = cupSvg.createSVGPoint(); pt.x = evt.clientX; pt.y = evt.clientY; const ctm = cupSvg.getScreenCTM().inverse(); const p = pt.matrixTransform(ctm); return p.y;
-  }
-
-  handleEl.addEventListener('pointerdown', (e)=>{
-    e.preventDefault(); handleEl.setPointerCapture(e.pointerId);
-    dragging = true; startY = getSvgY(e); startUpperMl = state.layers[upperIndex].ml; startLowerMl = state.layers[upperIndex+1].ml; 
-  });
-  handleEl.addEventListener('pointermove', (e)=>{
-    if(!dragging) return; const y = getSvgY(e); const dy = startY - y; // positive when moving up
-    const deltaMl = Math.round(dy / pxPerMl);
-    // new upper ml
-    let newUpper = Math.max(0, startUpperMl + deltaMl);
-    let newLower = Math.max(0, startLowerMl - deltaMl);
-    // clamp so they don't exceed fillTarget
-    const maxUpper = startUpperMl + startLowerMl; if(newUpper > maxUpper) newUpper = maxUpper;
-    if(newLower > startUpperMl + startLowerMl) newLower = startUpperMl + startLowerMl;
-    state.layers[upperIndex].ml = newUpper;
-    state.layers[upperIndex+1].ml = newLower;
-    // ensure integers and sum invariant
-    normalizeLayersToFill();
-    render();
-  });
+  let dragging = false; let startY = 0; let startUpperMl = 0; let startLowerMl = 0;
+  function getSvgY(evt){ const pt = cupSvg.createSVGPoint(); pt.x = evt.clientX; pt.y = evt.clientY; const ctm = cupSvg.getScreenCTM().inverse(); const p = pt.matrixTransform(ctm); return p.y; }
+  handleEl.addEventListener('pointerdown', (e)=>{ e.preventDefault(); handleEl.setPointerCapture(e.pointerId); dragging = true; startY = getSvgY(e); startUpperMl = state.layers[upperIndex].ml; startLowerMl = state.layers[upperIndex+1].ml; });
+  handleEl.addEventListener('pointermove', (e)=>{ if(!dragging) return; const y = getSvgY(e); const dy = startY - y; const deltaMl = Math.round(dy / pxPerMl); let newUpper = Math.max(0, startUpperMl + deltaMl); let newLower = Math.max(0, startLowerMl - deltaMl); const maxUpper = startUpperMl + startLowerMl; if(newUpper > maxUpper) newUpper = maxUpper; state.layers[upperIndex].ml = newUpper; state.layers[upperIndex+1].ml = newLower; normalizeLayersToFill(); render(); });
   handleEl.addEventListener('pointerup', (e)=>{ dragging=false; try{ handleEl.releasePointerCapture(e.pointerId);}catch(_){ } });
   handleEl.addEventListener('pointercancel', ()=>{ dragging=false; });
 }
 
 render();
-
-/* End of script */
 </script>
 </body>
 </html>
