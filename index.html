@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Vector Coffee Cup — Preview</title>
+  <style>
+    :root{
+      --bg:#f6f7f9; --card:#ffffff; --muted:#7b7b7b; --accent:#b29c60;
+      --panel-width:360px;
+    }
+    html,body{height:100%; margin:0; font-family:Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;}
+    body{background:var(--bg); display:flex; align-items:flex-start; justify-content:center; padding:28px;}
+    .wrap{max-width:1100px; width:100%; display:flex; gap:20px;}
+    .panel{width:var(--panel-width); background:var(--card); border-radius:16px; padding:18px; box-shadow:0 6px 20px rgba(15,15,20,0.06);}
+    .preview{flex:1; background:var(--card); border-radius:16px; padding:22px; box-shadow:0 6px 20px rgba(15,15,20,0.06); display:flex; flex-direction:column; align-items:center;}
+    h2{margin:0 0 12px 0; font-size:18px;}
+    .row{display:flex; gap:8px; align-items:center;}
+    .btn{padding:8px 12px; border-radius:10px; border:1px solid #e6e6e6; background:#fff; cursor:pointer;}
+    .btn-primary{background:#10b981;color:#fff;border:none;}
+    .select, select{padding:8px;border-radius:8px;border:1px solid #e6e6e6;background:#fff;}
+    .layers{margin-top:12px; max-height:340px; overflow:auto; display:flex; flex-direction:column; gap:8px;}
+    .layer{display:flex; align-items:center; gap:8px; padding:8px; border-radius:10px; border:1px solid #f0f0f0; background:#fafafa;}
+    .color-swatch{width:14px;height:36px;border-radius:4px;border:1px solid rgba(0,0,0,0.06);}
+    .muted{color:var(--muted); font-size:12px;}
+    .small{font-size:13px;}
+    footer.note{margin-top:12px;font-size:12px;color:var(--muted);}
+    .controls{display:flex; gap:8px; margin-top:10px;}
+    .badge{padding:6px 10px; border-radius:10px; background:#fff; border:1px solid #efe6d6;}
+    /* small responsive */
+    @media (max-width:940px){
+      body{padding:14px}
+      .wrap{flex-direction:column}
+      .panel{width:100%}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <h2>Настройки стакана</h2>
+
+      <div style="margin-bottom:12px;">
+        <div class="muted small">Объём</div>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <label class="btn" id="v250"><input type="radio" name="vol" value="250" style="display:none"> 250 мл</label>
+          <label class="btn" id="v350"><input type="radio" name="vol" value="350" style="display:none"> 350 мл</label>
+        </div>
+      </div>
+
+      <div style="margin-bottom:8px;">
+        <div class="muted small">Добавить слой</div>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <select id="ingredient" class="select" style="flex:1"></select>
+          <button id="addLayer" class="btn">Добавить</button>
+        </div>
+      </div>
+
+      <div>
+        <div class="muted small">Слои (<span id="layerCount">0</span>)</div>
+        <div class="layers" id="layersList"></div>
+      </div>
+
+      <div class="controls">
+        <button id="exportSvg" class="btn-primary btn" style="flex:1">Экспортировать SVG</button>
+        <button id="copyJson" class="btn">Копировать JSON</button>
+      </div>
+
+      <footer class="note">SVG экспорт сохраняет вектор — можно открыть в Figma / Illustrator.</footer>
+    </div>
+
+    <div class="preview">
+      <h2>Превью стакана</h2>
+      <div id="svgWrap" style="background:#fff; padding:18px; border-radius:12px;">
+        <!-- SVG will be inserted here -->
+      </div>
+
+      <div style="display:flex; gap:12px; margin-top:12px; align-items:center;">
+        <div class="badge" id="volumeBadge">350 мл</div>
+        <div class="muted small" id="layersBadge">0 слоёв</div>
+      </div>
+
+      <div class="muted small" style="margin-top:10px;">Сделано как вектор — можно экспортировать для Figma / Illustrator.</div>
+    </div>
+  </div>
+
+<script>
+/* ---------- Data & palette ---------- */
+const ALL_INGREDIENTS = [
+  "Эспрессо","Молоко","Сливки","Вода","Пенка","Кокосовый раф",
+  "Банановый раф","Клубничный раф","Малиновый раф","Шоколад","Какао","Лёд"
+];
+const PALETTE = {
+  "Эспрессо":"#4B2E2E","Молоко":"#F5EDE6","Сливки":"#FFF7E6","Вода":"#CFE7FF",
+  "Пенка":"#FFFFFF","Кокосовый раф":"#F7E9D9","Банановый раф":"#FBE8A6",
+  "Клубничный раф":"#FFD0D8","Малиновый раф":"#FFB3C2","Шоколад":"#3E2B2B",
+  "Какао":"#6B3F2F","Лёд":"#E6F7FF"
+};
+
+function uid(){ return Math.random().toString(36).slice(2,9); }
+
+/* ---------- State ---------- */
+let state = {
+  volume: 350,
+  layers: [
+    {id: uid(), name: "Эспрессо"},
+    {id: uid(), name: "Молоко"},
+    {id: uid(), name: "Пенка"}
+  ]
+};
+
+/* ---------- DOM refs ---------- */
+const ingredientSelect = document.getElementById('ingredient');
+const addLayerBtn = document.getElementById('addLayer');
+const layersList = document.getElementById('layersList');
+const layerCountEl = document.getElementById('layerCount');
+const svgWrap = document.getElementById('svgWrap');
+const exportBtn = document.getElementById('exportSvg');
+const copyJsonBtn = document.getElementById('copyJson');
+const v250 = document.getElementById('v250');
+const v350 = document.getElementById('v350');
+const volumeBadge = document.getElementById('volumeBadge');
+const layersBadge = document.getElementById('layersBadge');
+
+/* ---------- Init UI ---------- */
+ALL_INGREDIENTS.forEach(i => {
+  const o = document.createElement('option');
+  o.value = i; o.textContent = i;
+  ingredientSelect.appendChild(o);
+});
+ingredientSelect.value = ALL_INGREDIENTS[0];
+
+function setVolumeUI(v){
+  document.querySelectorAll('[name=vol]').forEach(inp => inp.checked = false);
+  if(v===250) { v250.classList.add('active'); v250.style.borderColor='#444'; }
+  else { v350.classList.add('active'); v350.style.borderColor='#444'; }
+}
+
+/* buttons to change volume: (labels contain hidden radio) */
+v250.addEventListener('click', ()=>{ state.volume=250; render(); });
+v350.addEventListener('click', ()=>{ state.volume=350; render(); });
+
+/* ---------- Actions ---------- */
+addLayerBtn.addEventListener('click', ()=>{
+  const name = ingredientSelect.value;
+  state.layers.push({id:uid(), name});
+  render();
+});
+
+exportBtn.addEventListener('click', ()=>{
+  const svg = document.getElementById('vector-cup-svg');
+  if(!svg) return alert('SVG не найден');
+  const clone = svg.cloneNode(true);
+  // serialize
+  const s = new XMLSerializer().serializeToString(clone);
+  const blob = new Blob([s], {type:'image/svg+xml;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `cup_${state.volume}ml.svg`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
+
+copyJsonBtn.addEventListener('click', ()=>{
+  navigator.clipboard?.writeText(JSON.stringify(state.layers, null, 2));
+  alert('JSON слоёв скопирован в буфер обмена');
+});
+
+/* ---------- Helpers for layer controls ---------- */
+function moveLayer(id, dir){
+  const idx = state.layers.findIndex(l=>l.id===id); if(idx===-1) return;
+  const swap = dir==='up'? idx-1: idx+1;
+  if(swap<0 || swap>=state.layers.length) return;
+  [state.layers[idx], state.layers[swap]] = [state.layers[swap], state.layers[idx]];
+  render();
+}
+function removeLayer(id){
+  state.layers = state.layers.filter(l=>l.id!==id);
+  render();
+}
+
+/* ---------- Rendering SVG ---------- */
+function renderSVG(){
+  const cupInnerHeight = state.volume===350?420:300;
+  const cupInnerWidth = 220;
+  const layerCount = Math.max(1, state.layers.length);
+  const unitH = cupInnerHeight / layerCount;
+  const svgW = 350, svgH = cupInnerHeight + 140;
+
+  // build SVG string (keeps it simple and inline)
+  let layersStr = '';
+  // draw from bottom up
+  for(let i=0;i<state.layers.length;i++){
+    const layer = state.layers[i];
+    const idx = i;
+    const h = unitH;
+    const y = (layerCount - 1 - idx) * h;
+    const color = PALETTE[layer.name] || '#DDDDDD';
+    layersStr += `<g>
+      <rect x="${-60}" y="${y}" width="${cupInnerWidth}" height="${h}" rx="10" fill="${color}" />
+      ${ (layer.name==='Пенка' || layer.name==='Молоко') ? `<g opacity="0.9"><ellipse cx="${cupInnerWidth/2-20}" cy="${y+12}" rx="50" ry="10" fill="#ffffff" opacity="0.25"/></g>` : ''}
+      ${ layer.name==='Лёд' ? (()=>{ let s=''; [0,1,2,3,4].forEach(n=>{ const x = -40 + (n%2)*40; const yy = y + 10 + Math.floor(n/2)*24; s+=`<rect x="${x}" y="${yy}" width="18" height="18" rx="3" fill="#ffffff" opacity="0.6" transform="rotate(-8 ${x+9} ${yy+9})"/>`; }); return s; })() : '' }
+    </g>`;
+  }
+
+  const svg = `
+  <svg id="vector-cup-svg" width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="8" stdDeviation="12" flood-opacity="0.12"/></filter>
+      <clipPath id="cup-clip"><path d="M65 70 q-10 0 -20 12 l-4 6 q0 120 104 120 l0 0 q104 0 104 -120 l-4 -6 q-10 -12 -20 -12 z"/></clipPath>
+      <path id="cup-outline" d="M55 50 q-18 0 -30 22 l-6 12 q0 140 132 140 l0 0 q132 0 132 -140 l-6 -12 q-12 -22 -30 -22 z" />
+    </defs>
+
+    <ellipse cx="${svgW/2}" cy="${svgH-24}" rx="80" ry="12" fill="#000" opacity="0.06" />
+
+    <g transform="translate(${(svgW - cupInnerWidth) / 2 - 10}, 20)">
+      <path d="M10 30 q-6 0 -12 9 l-4 9 q0 160 120 160 l0 0 q120 0 120 -160 l-4 -9 q-6 -9 -12 -9 z" fill="#fffdf9" stroke="#e7e0d6" stroke-width="2" rx="10" filter="url(#shadow)"/>
+      <ellipse cx="${(cupInnerWidth + 20) / 2}" cy="34" rx="${(cupInnerWidth - 40) / 2 + 20}" ry="14" fill="#f7f3ef" stroke="#e6ded2" stroke-width="1"/>
+
+      <g clip-path="url(#cup-clip)" transform="translate(65, 70)">
+        ${layersStr}
+      </g>
+
+      <g transform="translate(60, 70)" opacity="0.06">
+        ${Array.from({length:10}).map((_,i)=> `<rect x="${i*12 - 60}" y="0" width="6" height="${cupInnerHeight}" rx="3" />`).join('')}
+      </g>
+
+      <g transform="translate(60, 70)"><ellipse cx="${cupInnerWidth/2-20}" cy="-2" rx="${cupInnerWidth/2}" ry="12" fill="#ffffff" opacity="0.08" /></g>
+      <use href="#cup-outline" fill="none" stroke="#d8cfc3" stroke-width="2" opacity="0.9" transform="translate(60, 20)" />
+    </g>
+
+    <g transform="translate(${svgW - 180}, ${svgH - 120})">
+      <rect x="0" y="0" rx="14" ry="14" width="160" height="60" fill="#ffffff" stroke="#efe7db" />
+      <text x="12" y="26" font-size="14" font-family="sans-serif" fill="#444">${state.volume} мл</text>
+      <text x="12" y="46" font-size="12" font-family="sans-serif" fill="#666">${state.layers.length} слоёв</text>
+    </g>
+  </svg>
+  `;
+  svgWrap.innerHTML = svg;
+}
+
+/* ---------- Render UI (layers list and badges) ---------- */
+function render(){
+  // volume UI
+  v250.style.borderColor = '#e6e6e6'; v350.style.borderColor = '#e6e6e6';
+  if(state.volume===250){ v250.style.borderColor='#444'; v250.style.background='#f3f4f6'; v350.style.background='#fff'; }
+  else { v350.style.borderColor='#444'; v350.style.background='#f3f4f6'; v250.style.background='#fff'; }
+  volumeBadge.textContent = state.volume + ' мл';
+  layersBadge.textContent = state.layers.length + ' слоёв';
+  layerCountEl.textContent = state.layers.length;
+
+  // layers list
+  layersList.innerHTML = '';
+  state.layers.slice().forEach((l, idx)=>{
+    const el = document.createElement('div'); el.className='layer';
+    const sw = document.createElement('div'); sw.className='color-swatch';
+    sw.style.background = PALETTE[l.name] || '#DDDDDD';
+    const mid = document.createElement('div'); mid.style.flex='1';
+    mid.innerHTML = `<div style="font-weight:600">${l.name}</div><div class="muted small">Высота: ${Math.round((state.volume===350?420:300)/Math.max(1,state.layers.length))}px</div>`;
+    const controls = document.createElement('div'); controls.style.display='flex'; controls.style.flexDirection='column';
+    const up = document.createElement('button'); up.className='btn'; up.textContent='▲'; up.style.marginBottom='6px';
+    const down = document.createElement('button'); down.className='btn'; down.textContent='▼';
+    up.onclick = ()=>moveLayer(l.id,'up'); down.onclick = ()=>moveLayer(l.id,'down');
+    controls.appendChild(up); controls.appendChild(down);
+    const del = document.createElement('button'); del.className='btn'; del.textContent='Удалить'; del.style.marginLeft='8px';
+    del.onclick = ()=>removeLayer(l.id);
+
+    el.appendChild(sw); el.appendChild(mid); el.appendChild(controls); el.appendChild(del);
+    layersList.appendChild(el);
+  });
+
+  // draw svg
+  renderSVG();
+}
+
+/* initial render */
+render();
+</script>
+</body>
+</html>
