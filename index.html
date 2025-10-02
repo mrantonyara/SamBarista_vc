@@ -1,301 +1,461 @@
-import React, { useState } from "react";
-
-// VectorCupComponent.jsx
-// Tailwind CSS assumed in the project.
-// Обновлён: пустые слои по умолчанию, чашка всегда физически 350мл,
-// выбор 250/350 теперь отвечает за уровень заполнения (наполовину / почти полностью).
-
-const ALL_INGREDIENTS = [
-  "Эспрессо",
-  "Молоко",
-  "Сливки",
-  "Вода",
-  "Пенка",
-  "Кокосовый раф",
-  "Банановый раф",
-  "Клубничный раф",
-  "Малиновый раф",
-  "Шоколад",
-  "Какао",
-  "Лёд",
-];
-
-function uid() {
-  return Math.random().toString(36).slice(2, 9);
-}
-
-export default function VectorCupApp() {
-  // Фактическая физическая ёмкость и размер стакана — всегда 350 мл
-  const PHYSICAL_VOLUME = 350;
-
-  // selectedFill: 250 означает режим "наполовину", 350 — "почти полный"
-  const [selectedFill, setSelectedFill] = useState(350);
-
-  // По умолчанию — пусто (без слоёв). Пользователь добавит их сам.
-  const [layers, setLayers] = useState([]);
-  const [selectedIngredient, setSelectedIngredient] = useState(ALL_INGREDIENTS[0]);
-
-  // Визуальные размеры — всегда для 350 мл (физический стакан)
-  const cupInnerHeight = 420; // px высота внутренней области стакана для 350мл
-  const cupInnerWidth = 220; // px
-
-  // Наполнение: если пользователь выбрал 250 -> считать как наполовину (0.5), а при 350 -> почти полностью (0.95)
-  const fillRatio = selectedFill === 250 ? 0.5 : 0.95;
-  const fillHeight = cupInnerHeight * fillRatio;
-
-  function addLayer() {
-    setLayers((s) => [...s, { id: uid(), name: selectedIngredient }]);
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Vector Coffee Cup — Single File</title>
+<style>
+  :root{
+    --bg:#f5f7fa; --card:#ffffff; --muted:#7b7b7b; --accent:#b29c60;
+    --panel-w:360px;
+    --radius:14px;
+    --cup-bg: #fffdf9;
   }
+  *{box-sizing:border-box}
+  body{margin:0; font-family:Inter, Roboto, "Helvetica Neue", Arial, sans-serif; background:var(--bg); color:#1f2937;}
+  .wrap{max-width:1200px; margin:28px auto; display:flex; gap:20px; padding:0 18px;}
+  .panel{width:var(--panel-w); background:var(--card); border-radius:var(--radius); padding:20px; box-shadow:0 8px 30px rgba(16,24,40,0.06);}
+  .preview{flex:1; background:var(--card); border-radius:var(--radius); padding:22px; box-shadow:0 8px 30px rgba(16,24,40,0.06); display:flex; flex-direction:column; align-items:center;}
+  h2{margin:0 0 14px 0; font-size:18px}
+  .muted{color:var(--muted); font-size:13px}
+  .row{display:flex; gap:8px; align-items:center}
+  .btn{padding:8px 12px; border-radius:10px; border:1px solid #e6e6e6; background:#fff; cursor:pointer; font-size:14px}
+  .btn-primary{background:#10b981;color:#fff;border:none}
+  select, input[type="text"]{padding:8px;border-radius:10px;border:1px solid #e6e6e6;background:#fff; width:100%}
+  .layers-list{margin-top:12px; max-height:340px; overflow:auto; display:flex; flex-direction:column; gap:10px}
+  .layer-item{display:grid; grid-template-columns:24px 1fr auto; gap:8px; align-items:center; padding:10px; border-radius:10px; border:1px solid #f1f1f1; background:#fbfbfb}
+  .swatch{width:24px; height:40px; border-radius:8px; border:1px solid rgba(0,0,0,0.06)}
+  .small{font-size:13px}
+  .control-row{display:flex; gap:8px; margin-top:8px}
+  .note{font-size:12px; color:var(--muted); margin-top:12px}
+  .badge{padding:8px 12px; border-radius:12px; background:#fff; border:1px solid #efe7db; font-size:13px}
+  input[type=range]{width:100%}
+  .color-presets{display:flex; gap:6px; margin-top:6px}
+  .preset{width:18px; height:18px; border-radius:4px; border:1px solid rgba(0,0,0,0.06); cursor:pointer}
+  .title-input{margin-bottom:10px}
+  .top-controls{display:flex; gap:8px; align-items:center; margin-bottom:12px}
+  .right-stats{position:absolute; right:40px; top:32px; text-align:right}
+  /* responsive */
+  @media (max-width:980px){ .wrap{flex-direction:column} .panel{width:100%} .right-stats{position:static; margin-top:10px; text-align:left} }
+</style>
+</head>
+<body>
+  <div class="wrap" style="position:relative">
+    <div class="panel">
+      <h2>Настройки стакана</h2>
 
-  function removeLayer(id) {
-    setLayers((s) => s.filter((l) => l.id !== id));
-  }
+      <div class="title-input">
+        <label class="small muted">Название напитка (на крышке)</label>
+        <input id="drinkName" type="text" placeholder="Например: Кокосовый раф" />
+      </div>
 
-  function moveLayer(id, dir) {
-    setLayers((s) => {
-      const idx = s.findIndex((x) => x.id === id);
-      if (idx === -1) return s;
-      const newArr = [...s];
-      const swapIdx = dir === "up" ? idx - 1 : idx + 1;
-      if (swapIdx < 0 || swapIdx >= newArr.length) return s;
-      [newArr[idx], newArr[swapIdx]] = [newArr[swapIdx], newArr[idx]];
-      return newArr;
-    });
-  }
-
-  function exportSVG() {
-    const svgEl = document.getElementById("vector-cup-svg");
-    if (!svgEl) return;
-    const clone = svgEl.cloneNode(true);
-    const svgString = new XMLSerializer().serializeToString(clone);
-    const blob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `cup_${PHYSICAL_VOLUME}ml_fill${selectedFill}ml.svg`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }
-
-  const colorFor = (name) => {
-    const map = {
-      "Эспрессо": "#4B2E2E",
-      "Молоко": "#F5EDE6",
-      "Сливки": "#FFF7E6",
-      "Вода": "#CFE7FF",
-      "Пенка": "#FFFFFF",
-      "Кокосовый раф": "#F7E9D9",
-      "Банановый раф": "#FBE8A6",
-      "Клубничный раф": "#FFD0D8",
-      "Малиновый раф": "#FFB3C2",
-      "Шоколад": "#3E2B2B",
-      "Какао": "#6B3F2F",
-      "Лёд": "#E6F7FF",
-    };
-    return map[name] || "#DDDDDD";
-  };
-
-  // unitHeight делим только по области заполнения (fillHeight)
-  const layerCount = layers.length || 0;
-  const unitHeight = layerCount > 0 ? fillHeight / layerCount : 0;
-
-  // SVG размеры
-  const svgWidth = 420;
-  const svgHeight = cupInnerHeight + 160; // место для тени и бейджа
-
-  // Стили контейнера и небольшие подсказки в UI — правим разметку так, чтобы не "съезжало"
-  return (
-    <div className="p-6 min-h-screen bg-gray-50">
-      <div className="max-w-6xl mx-auto flex gap-8 flex-col md:flex-row">
-        {/* Controls */}
-        <div className="w-full md:w-96 bg-white p-6 rounded-2xl shadow">
-          <h2 className="text-xl font-semibold mb-4">Настройки стакана</h2>
-
-          <div className="mb-4">
-            <label className="block text-sm text-gray-600 mb-2">Уровень заполнения</label>
-            <div className="flex gap-3">
-              <label
-                className={`px-3 py-2 rounded-lg cursor-pointer border ${selectedFill === 250 ? 'border-gray-800 bg-gray-100' : 'border-gray-200'}`}
-                onClick={() => setSelectedFill(250)}
-              >
-                Наполовину (250 мл)
-              </label>
-              <label
-                className={`px-3 py-2 rounded-lg cursor-pointer border ${selectedFill === 350 ? 'border-gray-800 bg-gray-100' : 'border-gray-200'}`}
-                onClick={() => setSelectedFill(350)}
-              >
-                Почти полностью (350 мл)
-              </label>
-            </div>
-            <p className="text-xs text-gray-500 mt-2">Примечание: стакан всегда физически 350 мл. Выбор влияет на высоту заполнения.</p>
-          </div>
-
-          <div className="mb-4">
-            <label className="block text-sm text-gray-600 mb-2">Добавить слой</label>
-            <div className="flex gap-2">
-              <select
-                value={selectedIngredient}
-                onChange={(e) => setSelectedIngredient(e.target.value)}
-                className="flex-1 border rounded-lg px-3 py-2"
-              >
-                {ALL_INGREDIENTS.map((ing) => (
-                  <option key={ing} value={ing}>
-                    {ing}
-                  </option>
-                ))}
-              </select>
-              <button className="px-3 py-2 bg-amber-400 rounded-lg" onClick={addLayer}>
-                Добавить
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm text-gray-600 mb-2">Слои ({layerCount})</label>
-            <div className="space-y-2 max-h-64 overflow-auto pr-2">
-              {layers.length === 0 ? (
-                <div className="text-sm text-gray-500 p-3 rounded-lg border">Пусто — добавьте слои через селектор выше.</div>
-              ) : (
-                layers.map((l, i) => (
-                  <div key={l.id} className="flex items-center gap-2 p-2 rounded-lg border">
-                    <div className="w-3 h-8 rounded-sm" style={{ background: colorFor(l.name) }} />
-                    <div className="flex-1">
-                      <div className="font-medium">{l.name}</div>
-                      <div className="text-xs text-gray-500">Высота: {Math.round(unitHeight)}px</div>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <button onClick={() => moveLayer(l.id, 'up')} className="text-sm p-1 rounded hover:bg-gray-100">▲</button>
-                      <button onClick={() => moveLayer(l.id, 'down')} className="text-sm p-1 rounded hover:bg-gray-100">▼</button>
-                    </div>
-                    <button onClick={() => removeLayer(l.id)} className="text-xs text-red-600 px-2 py-1">Удалить</button>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          <div className="mt-6 flex gap-3">
-            <button onClick={exportSVG} className="flex-1 py-2 rounded-lg bg-emerald-500 text-white">Экспортировать SVG</button>
-            <button onClick={() => navigator.clipboard && navigator.clipboard.writeText(JSON.stringify(layers))} className="py-2 px-3 rounded-lg border">Копировать JSON</button>
-          </div>
-
-          <p className="mt-4 text-xs text-gray-500">SVG экспорт сохраняет вектор — можно открыть в Figma/Illustrator.</p>
+      <div style="margin-bottom:10px">
+        <label class="small muted">Уровень заполнения (целевая величина)</label>
+        <div class="control-row">
+          <button class="btn" data-fill="30">30 мл</button>
+          <button class="btn" data-fill="60">60 мл</button>
+          <button class="btn" data-fill="250">250 мл</button>
+          <button class="btn" data-fill="350">350 мл</button>
         </div>
+        <div class="note">Стакан физически: <strong>350 мл</strong>. Выбранный уровень ограничивает суммарный объём слоёв.</div>
+      </div>
 
-        {/* Preview */}
-        <div className="flex-1 bg-white p-6 rounded-2xl shadow flex flex-col items-center">
-          <h3 className="text-lg font-semibold mb-4">Превью стакана</h3>
-
-          <div className="bg-white p-6 rounded-xl w-full flex justify-center">
-            <svg
-              id="vector-cup-svg"
-              width={Math.min(560, svgWidth)}
-              height={(Math.min(560, svgWidth) / svgWidth) * svgHeight}
-              viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-              xmlns="http://www.w3.org/2000/svg"
-              preserveAspectRatio="xMidYMin meet"
-            >
-              <defs>
-                <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
-                  <feDropShadow dx="0" dy="8" stdDeviation="12" floodOpacity="0.12" />
-                </filter>
-
-                {/* clipPath — внутренняя область для жидкости (формы бумажного стакана) */}
-                <clipPath id="cup-clip">
-                  <path d={`M${svgWidth/2 - 110} 80
-                              C${svgWidth/2 - 90} 80, ${svgWidth/2 - 70} 80, ${svgWidth/2 + 110} 80
-                              L${svgWidth/2 + 90} ${80 + cupInnerHeight}
-                              C${svgWidth/2 + 40} ${80 + cupInnerHeight + 18}, ${svgWidth/2 - 40} ${80 + cupInnerHeight + 18}, ${svgWidth/2 - 90} ${80 + cupInnerHeight}
-                              Z`} />
-                </clipPath>
-
-                {/* Outline path for the paper cup — классическая форма стакана (усечённый конус) */}
-                <path id="cup-outline" d={`M${svgWidth/2 - 120} 70
-                                              C${svgWidth/2 - 60} 40, ${svgWidth/2 + 60} 40, ${svgWidth/2 + 120} 70
-                                              L${svgWidth/2 + 95} ${80 + cupInnerHeight}
-                                              C${svgWidth/2 + 50} ${80 + cupInnerHeight + 22}, ${svgWidth/2 - 50} ${80 + cupInnerHeight + 22}, ${svgWidth/2 - 95} ${80 + cupInnerHeight}
-                                              Z`} />
-              </defs>
-
-              {/* shadow */}
-              <ellipse cx={svgWidth / 2} cy={svgHeight - 20} rx={100} ry={14} fill="#000" opacity="0.06" />
-
-              {/* paper cup body */}
-              <g>
-                <use href="#cup-outline" fill="#fffdf9" stroke="#e7e0d6" strokeWidth={2} filter="url(#shadow)" />
-
-                {/* rim */}
-                <ellipse cx={svgWidth/2} cy={82} rx={110} ry={16} fill="#f7f3ef" stroke="#e6ded2" strokeWidth={1} />
-
-                {/* vertical texture */}
-                <g opacity={0.06}>
-                  {Array.from({length:12}).map((_,i)=>{
-                    const x = svgWidth/2 - 100 + i*18;
-                    return <rect key={i} x={x} y={90} width={8} height={cupInnerHeight} rx={4} />
-                  })}
-                </g>
-
-                {/* layers clipped inside */}
-                <g clipPath="url(#cup-clip)">
-                  {/* base empty area: draw background for full inner area */}
-                  <rect x={svgWidth/2 - 110} y={80} width={220} height={cupInnerHeight} fill="transparent" />
-
-                  {/* filled part: compute yStart so that liquids stack from bottom up to fillHeight */}
-                  {layerCount === 0 ? null : (
-                    (() => {
-                      const parts = [];
-                      const total = layerCount;
-                      for (let i = 0; i < layers.length; i++) {
-                        const layer = layers[i];
-                        const h = unitHeight;
-                        const y = 80 + (cupInnerHeight - fillHeight) + (total - 1 - i) * h; // bottom-up stacking inside clip
-                        const color = colorFor(layer.name);
-                        parts.push(
-                          <g key={layer.id}>
-                            <rect x={svgWidth/2 - 110} y={y} width={220} height={h} fill={color} rx={6} />
-                            {(layer.name === 'Пенка' || layer.name === 'Молоко') && (
-                              <ellipse cx={svgWidth/2} cy={y + 10} rx={80} ry={10} fill="#ffffff" opacity={0.18} />
-                            )}
-                            {layer.name === 'Лёд' && (
-                              <g>
-                                {[0,1,2,3].map(n => {
-                                  const ix = svgWidth/2 - 90 + (n%2)*60;
-                                  const iy = y + 10 + Math.floor(n/2)*34;
-                                  return <rect key={n} x={ix} y={iy} width={20} height={20} rx={4} fill="#fff" opacity={0.6} transform={`rotate(-6 ${ix+10} ${iy+10})`} />
-                                })}
-                              </g>
-                            )}
-                          </g>
-                        );
-                      }
-                      return parts;
-                    })()
-                  )}
-                </g>
-
-                {/* top soft highlight */}
-                <ellipse cx={svgWidth/2} cy={92} rx={100} ry={12} fill="#ffffff" opacity={0.06} />
-
-                {/* outline stroke */}
-                <use href="#cup-outline" fill="none" stroke="#d8cfc3" strokeWidth={2} opacity={0.95} />
-              </g>
-
-              {/* badge */}
-              <g transform={`translate(${svgWidth/2 - 70}, ${svgHeight - 120})`}>
-                <rect x={0} y={0} rx={12} width={140} height={54} fill="#fff" stroke="#efe7db" />
-                <text x={14} y={26} fontSize={14} fontFamily="sans-serif" fill="#444">{PHYSICAL_VOLUME} мл</text>
-                <text x={14} y={44} fontSize={12} fontFamily="sans-serif" fill="#666">{layers.length} слоёв</text>
-              </g>
-            </svg>
-          </div>
-
-          <div className="mt-5 text-sm text-gray-600">Сделано как вектор — можно экспортировать для Figma / Illustrator.</div>
+      <div style="margin-top:12px">
+        <label class="small muted">Добавить слой</label>
+        <div style="display:flex; gap:8px; margin-top:8px">
+          <select id="ingredient" style="flex:1"></select>
+          <button id="addLayer" class="btn btn-primary">Добавить</button>
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto mt-6 text-xs text-gray-500">Подсказки: стакан — всегда 350 мл физически. Выбор 250/350 влияет только на высоту заполнения (наполовину / почти полный). Экспорт SVG сохраняет текущий вид.</div>
+      <div style="margin-top:14px">
+        <label class="small muted">Слои (<span id="layerCount">0</span>)</label>
+        <div class="layers-list" id="layersList">
+          <!-- layer items -->
+        </div>
+      </div>
+
+      <div style="margin-top:12px; display:flex; gap:8px">
+        <button id="exportSvg" class="btn-primary btn" style="flex:1">Экспортировать SVG</button>
+        <button id="copyJson" class="btn">Копировать JSON</button>
+      </div>
+
+      <div class="note">Слои можно регулировать ползунком (в мл). Цвет редактируется вручную или выбирается из пресетов. Волнообразная граница — для плавного вида.</div>
     </div>
-  );
+
+    <div class="preview" id="previewWrap">
+      <div style="width:100%; display:flex; align-items:center; justify-content:space-between">
+        <h2 style="font-size:18px; margin:0">Превью стакана</h2>
+        <div class="right-stats" id="rightStats">
+          <div class="muted small">Наполнено</div>
+          <div class="badge" id="filledBadge">0 / 350 мл</div>
+        </div>
+      </div>
+
+      <div style="width:100%; display:flex; justify-content:center; margin-top:18px;">
+        <!-- SVG area -->
+        <div style="background:var(--card); padding:18px; border-radius:12px">
+          <svg id="cupSvg" width="520" height="620" viewBox="0 0 520 620" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMin meet">
+            <defs>
+              <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="10" stdDeviation="18" flood-opacity="0.12"/></filter>
+              <clipPath id="cupClip">
+                <!-- inner area path (paper cup interior) -->
+                <path id="innerPath"/>
+              </clipPath>
+              <path id="cupShapePath"/>
+            </defs>
+
+            <!-- ground shadow -->
+            <ellipse cx="260" cy="590" rx="105" ry="14" fill="#000" opacity="0.06"/>
+
+            <!-- cup body -->
+            <g id="cupGroup">
+              <use href="#cupShapePath" fill="var(--cup-bg)" stroke="#e7e0d6" stroke-width="2" filter="url(#shadow)"/>
+              <!-- rim -->
+              <ellipse id="rim" cx="260" cy="110" rx="110" ry="18" fill="#f7f3ef" stroke="#e6ded2" stroke-width="1"/>
+            </g>
+
+            <!-- title on lid -->
+            <g transform="translate(0,0)" id="lidTitle">
+              <text id="lidText" x="260" y="112" font-family="sans-serif" font-size="14" text-anchor="middle" fill="#333"></text>
+            </g>
+
+            <!-- layers group clipped -->
+            <g clip-path="url(#cupClip)" id="layersGroup" transform="translate(0,0)">
+              <!-- layers will be injected here -->
+            </g>
+
+            <!-- overlay soft highlight -->
+            <ellipse cx="260" cy="132" rx="90" ry="12" fill="#ffffff" opacity="0.06" />
+
+            <!-- outline -->
+            <use href="#cupShapePath" fill="none" stroke="#d8cfc3" stroke-width="2" opacity="0.95" />
+            
+            <!-- layer labels on cup (right side) -->
+            <g id="labelsGroup"></g>
+
+            <!-- badge bottom -->
+            <g transform="translate(200, 500)">
+              <rect x="0" y="0" rx="12" width="160" height="54" fill="#fff" stroke="#efe7db"/>
+              <text id="badgeMain" x="12" y="26" font-size="14" font-family="sans-serif" fill="#444"></text>
+              <text id="badgeSub" x="12" y="44" font-size="12" font-family="sans-serif" fill="#666"></text>
+            </g>
+          </svg>
+        </div>
+      </div>
+
+      <div style="width:100%; display:flex; justify-content:space-between; margin-top:14px;">
+        <div class="muted small">Сделано как вектор — экспортируй SVG и открой в Figma / Illustrator.</div>
+        <div style="display:flex; gap:8px;">
+          <div class="muted small">Физический объём: <strong>350 мл</strong></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ---------- Data ---------- */
+const PHYSICAL_VOLUME = 350;
+const cupInner = { x: 260-110, y: 120, width: 220, height: 420 }; // internal clipping area
+const defaultPalette = {
+  "Эспрессо":"#4B2E2E","Молоко":"#F5EDE6","Сливки":"#FFF7E6","Вода":"#CFE7FF","Пенка":"#FFFFFF",
+  "Кокосовый раф":"#F7E9D9","Банановый раф":"#FBE8A6","Клубничный раф":"#FFD0D8","Малиновый раф":"#FFB3C2",
+  "Шоколад":"#3E2B2B","Какао":"#6B3F2F","Лёд":"#E6F7FF"
+};
+const ALL_INGREDIENTS = Object.keys(defaultPalette);
+
+/* ---------- State ---------- */
+let state = {
+  fillTarget: 350, // allowed: 30,60,250,350
+  layers: [], // each: {id,name,color,ml}
+  drinkName: ''
+};
+
+/* ---------- DOM refs ---------- */
+const ingredientSelect = document.getElementById('ingredient');
+const addLayerBtn = document.getElementById('addLayer');
+const layersList = document.getElementById('layersList');
+const layerCountEl = document.getElementById('layerCount');
+const filledBadge = document.getElementById('filledBadge');
+const exportBtn = document.getElementById('exportSvg');
+const copyJsonBtn = document.getElementById('copyJson');
+const cupSvg = document.getElementById('cupSvg');
+const layersGroup = document.getElementById('layersGroup');
+const badgeMain = document.getElementById('badgeMain');
+const badgeSub = document.getElementById('badgeSub');
+const lidText = document.getElementById('lidText');
+const drinkNameInput = document.getElementById('drinkName');
+const labelsGroup = document.getElementById('labelsGroup');
+const cupShapePath = document.getElementById('cupShapePath');
+const innerPath = document.getElementById('innerPath');
+
+/* ---------- Init UI ---------- */
+ALL_INGREDIENTS.forEach(ing=>{
+  const o = document.createElement('option'); o.value = ing; o.textContent = ing; ingredientSelect.appendChild(o);
+});
+document.querySelectorAll('.panel .btn[data-fill]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    state.fillTarget = Number(btn.dataset.fill);
+    render();
+  });
+});
+
+/* create cup paths (paper cup shape + inner) */
+function buildCupPaths(){
+  // outer cup path (rounded truncated cone)
+  const cx = 260, topY = 70, innerTop = 110, innerH = cupInner.height, topRx = 120;
+  // Outer shape using C curves for smooth paper-cup silhouette
+  const p = [
+    `M ${cx - topRx} ${topY}`,
+    `C ${cx - 60} ${topY-30}, ${cx + 60} ${topY-30}, ${cx + topRx} ${topY}`,
+    `L ${cx + 95} ${innerTop + innerH}`,
+    `C ${cx + 50} ${innerTop + innerH + 22}, ${cx - 50} ${innerTop + innerH + 22}, ${cx - 95} ${innerTop + innerH}`,
+    `Z`
+  ].join(' ');
+  cupShapePath.setAttribute('d', p);
+
+  // inner clip path (where liquid sits) - slightly inset
+  const inx = cupInner.x + 10, iny = cupInner.y, inw = cupInner.width - 20, inh = cupInner.height;
+  // make inner path slightly curved sides to simulate paper cup inner contour
+  const ip = [
+    `M ${inx} ${iny}`,
+    `C ${inx+12} ${iny-8}, ${inx+inw-12} ${iny-8}, ${inx+inw} ${iny}`,
+    `L ${inx+inw-10} ${iny+inh}`,
+    `C ${inx+inw-40} ${iny+inh+10}, ${inx+40} ${iny+inh+10}, ${inx+10} ${iny+inh}`,
+    `Z`
+  ].join(' ');
+  innerPath.setAttribute('d', ip);
 }
+buildCupPaths();
+
+/* ---------- Helpers ---------- */
+function uid(){ return Math.random().toString(36).slice(2,9); }
+
+function totalFilledMl(){
+  return state.layers.reduce((s,l)=>s + (Number(l.ml)||0), 0);
+}
+
+function remainingMl(){
+  return Math.max(0, state.fillTarget - totalFilledMl());
+}
+
+/* clamp a layer ml to allowed */
+function setLayerMl(id, ml){
+  ml = Number(ml);
+  const idx = state.layers.findIndex(l=>l.id===id); if(idx===-1) return;
+  // ensure not exceed fillTarget
+  let others = totalFilledMl() - (Number(state.layers[idx].ml)||0);
+  const allowed = Math.max(0, state.fillTarget - others);
+  if(ml > allowed) ml = allowed;
+  state.layers[idx].ml = ml;
+}
+
+/* add layer default ml = 0 and default color from palette */
+function addLayer(name){
+  const color = defaultPalette[name] || '#dddddd';
+  state.layers.push({ id: uid(), name, color, ml: 0 });
+  render();
+}
+
+/* remove */
+function removeLayer(id){ state.layers = state.layers.filter(l=>l.id!==id); render(); }
+
+/* move */
+function moveLayer(id, dir){
+  const idx = state.layers.findIndex(l=>l.id===id); if(idx===-1) return;
+  const ni = dir==='up'? idx-1: idx+1; if(ni<0 || ni>=state.layers.length) return;
+  const arr = [...state.layers]; [arr[idx], arr[ni]] = [arr[ni], arr[idx]]; state.layers = arr; render();
+}
+
+/* change color */
+function setLayerColor(id, color){ const l = state.layers.find(x=>x.id===id); if(l) l.color = color; render(); }
+
+/* change name */
+function setLayerName(id, name){ const l = state.layers.find(x=>x.id===id); if(l) l.name = name; render(); }
+
+/* change drink name */
+drinkNameInput.addEventListener('input', (e)=>{ state.drinkName = e.target.value; render(); });
+
+/* export SVG */
+exportBtn.addEventListener('click', ()=>{
+  // clone svg, inline styles that matter (none), serialize
+  const svg = cupSvg.cloneNode(true);
+  // ensure text content updated (already)
+  const s = new XMLSerializer().serializeToString(svg);
+  const blob = new Blob([s], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `cup_${PHYSICAL_VOLUME}ml_fill${state.fillTarget}ml.svg`;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+});
+
+/* copy JSON */
+copyJsonBtn.addEventListener('click', ()=>{
+  const data = JSON.stringify({ fillTarget: state.fillTarget, layers: state.layers, drinkName: state.drinkName }, null, 2);
+  navigator.clipboard?.writeText(data);
+  alert('JSON скопирован в буфер обмена');
+});
+
+/* ingredient add */
+addLayerBtn.addEventListener('click', ()=>{
+  const v = ingredientSelect.value;
+  addLayer(v);
+});
+
+/* init ingredient select */
+(function initIngredients(){
+  ingredientSelect.innerHTML = '';
+  ALL_INGREDIENTS.forEach(name=>{
+    const o = document.createElement('option'); o.value = name; o.textContent = name; ingredientSelect.appendChild(o);
+  });
+})();
+
+/* ---------- Render ---------- */
+function render(){
+  // UI list
+  layersList.innerHTML = '';
+  layerCountEl.textContent = state.layers.length;
+  state.layers.forEach((layer, idx)=>{
+    const item = document.createElement('div'); item.className='layer-item';
+    // swatch
+    const sw = document.createElement('div'); sw.className='swatch'; sw.style.background = layer.color || '#ddd';
+    // center area
+    const center = document.createElement('div'); center.style.display='flex'; center.style.flexDirection='column';
+    const top = document.createElement('div'); top.style.display='flex'; top.style.justifyContent='space-between'; top.style.alignItems='center';
+    const title = document.createElement('div'); title.innerHTML = `<strong>${layer.name}</strong> <div class="small muted">(${layer.ml} мл)</div>`;
+    const controls = document.createElement('div');
+    // color input and presets
+    const colorInput = document.createElement('input'); colorInput.type='color'; colorInput.value = layer.color || '#dddddd';
+    colorInput.title = 'Изменить цвет';
+    colorInput.addEventListener('input', (e)=>{ setLayerColor(layer.id, e.target.value); });
+    // presets
+    const presets = document.createElement('div'); presets.className='color-presets';
+    Object.values(defaultPalette).slice(0,8).forEach(c=>{
+      const p = document.createElement('div'); p.className='preset'; p.style.background=c; p.addEventListener('click', ()=> setLayerColor(layer.id, c)); presets.appendChild(p);
+    });
+    // name edit
+    const nameInput = document.createElement('input'); nameInput.type='text'; nameInput.value = layer.name; nameInput.style.marginTop='6px';
+    nameInput.addEventListener('change', (e)=> setLayerName(layer.id, e.target.value));
+    // slider for ml
+    const slider = document.createElement('input'); slider.type='range';
+    slider.min = 0; slider.max = state.fillTarget; slider.step=1; slider.value = layer.ml || 0;
+    slider.addEventListener('input', (e)=>{ setLayerMl(layer.id, Number(e.target.value)); render(); });
+    // small controls (move, delete)
+    const btnUp = document.createElement('button'); btnUp.className='btn'; btnUp.textContent='▲'; btnUp.style.padding='6px'; btnUp.addEventListener('click', ()=> moveLayer(layer.id,'up'));
+    const btnDown = document.createElement('button'); btnDown.className='btn'; btnDown.textContent='▼'; btnDown.style.padding='6px'; btnDown.addEventListener('click', ()=> moveLayer(layer.id,'down'));
+    const btnDel = document.createElement('button'); btnDel.className='btn'; btnDel.textContent='Удалить'; btnDel.style.padding='6px'; btnDel.addEventListener('click', ()=> { if(confirm('Удалить слой?')) removeLayer(layer.id); });
+
+    controls.appendChild(colorInput);
+    controls.appendChild(btnUp); controls.appendChild(btnDown); controls.appendChild(btnDel);
+
+    center.appendChild(title);
+    center.appendChild(nameInput);
+    center.appendChild(slider);
+    center.appendChild(presets);
+
+    item.appendChild(sw);
+    item.appendChild(center);
+    item.appendChild(controls);
+    layersList.appendChild(item);
+  });
+
+  // Update badges / right stats
+  const total = totalFilledMl();
+  filledBadge.textContent = `${total} / ${PHYSICAL_VOLUME} мл`;
+  badgeMain.textContent = `${PHYSICAL_VOLUME} мл`;
+  badgeSub.textContent = `${state.layers.length} слоёв`;
+
+  // Lid title
+  lidText.textContent = state.drinkName || '';
+
+  // Draw layers in SVG
+  while(layersGroup.firstChild) layersGroup.removeChild(layersGroup.firstChild);
+  while(labelsGroup.firstChild) labelsGroup.removeChild(labelsGroup.firstChild);
+
+  if(state.layers.length > 0 && state.fillTarget > 0){
+    // compute fillHeight proportional to fillTarget (max PHYSICAL_VOLUME)
+    const fillH = cupInner.height * (state.fillTarget / PHYSICAL_VOLUME);
+    // starting Y (top of filled zone)
+    const bottomY = cupInner.y + cupInner.height;
+    const filledTopY = bottomY - fillH;
+    // for stacking: each layer's height in px = (layer.ml / fillTarget) * fillH
+    // if sum ml < fillTarget, we leave empty space above
+    let currentBottom = bottomY;
+    // draw from bottom to top
+    for(let i=0;i<state.layers.length;i++){
+      const layer = state.layers[i];
+      const partRatio = (state.fillTarget === 0) ? 0 : (Number(layer.ml) / state.fillTarget);
+      const h = Math.max(0, Math.round(partRatio * fillH));
+      const topY = currentBottom - h;
+      // generate wavy path for top edge
+      const waveAmplitude = Math.min(10, h*0.12 + 4);
+      const waveCount = 3 + Math.floor(h/30);
+      const leftX = cupInner.x + 10;
+      const rightX = cupInner.x + cupInner.width - 10;
+      const width = rightX - leftX;
+      // build path: start at leftX, topY -> wave -> to rightX -> down to currentBottom -> back to left
+      let d = `M ${leftX} ${topY} `;
+      for(let wI=0; wI<=waveCount; wI++){
+        const px = leftX + (wI / waveCount) * width;
+        // sine-like vertical
+        const theta = (wI / waveCount) * Math.PI * 2;
+        const wy = topY + Math.sin(theta + i) * waveAmplitude;
+        // use q-curves
+        if(wI===0) d += `L ${px} ${wy} `;
+        else {
+          const prevPx = leftX + ((wI-1)/waveCount)*width;
+          const cpx = (prevPx + px)/2;
+          d += `Q ${cpx} ${ (topY + wy)/2 } ${px} ${wy} `;
+        }
+      }
+      // right down and bottom line
+      d += `L ${rightX} ${currentBottom} L ${leftX} ${currentBottom} Z`;
+
+      // create path element
+      const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+      path.setAttribute('d', d);
+      path.setAttribute('fill', layer.color || '#ddd');
+      path.setAttribute('stroke', 'none');
+      path.setAttribute('opacity', '1');
+      layersGroup.appendChild(path);
+
+      // label on right side: small rectangle with text aligned to mid of this layer
+      const labelY = topY + (h/2);
+      if(h > 8){
+        const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+        const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+        rect.setAttribute('x', cupInner.x + cupInner.width + 12);
+        rect.setAttribute('y', labelY - 12);
+        rect.setAttribute('width', 120);
+        rect.setAttribute('height', 24);
+        rect.setAttribute('rx', 8);
+        rect.setAttribute('fill', '#fff');
+        rect.setAttribute('stroke', '#efe7db');
+        rect.setAttribute('opacity','0.95');
+        const text = document.createElementNS('http://www.w3.org/2000/svg','text');
+        text.setAttribute('x', cupInner.x + cupInner.width + 18);
+        text.setAttribute('y', labelY + 6);
+        text.setAttribute('font-size','12');
+        text.setAttribute('font-family','sans-serif');
+        text.setAttribute('fill','#333');
+        text.textContent = `${layer.name} — ${layer.ml} мл`;
+        g.appendChild(rect); g.appendChild(text);
+        labelsGroup.appendChild(g);
+      }
+
+      currentBottom = topY;
+    }
+  }
+
+  // If no layers, maybe show subtle empty fill indicator (optional)
+}
+render();
+
+/* ---------- convenience: add some sample layers for demo (comment out if not needed) ---------- */
+// addLayer('Эспрессо'); addLayer('Молоко'); addLayer('Пенка');
+// state.layers[0].ml = 80; state.layers[1].ml = 120; state.layers[2].ml = 30; state.fillTarget = 350; render();
+
+/* End of script */
+</script>
+</body>
+</html>
